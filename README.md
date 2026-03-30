@@ -1,12 +1,63 @@
-# 快速开始指南 / Quick Start Guide
+# STM32F407 六轴机械臂控制系统
 
-## 5 分钟快速上手
+> **本项目基于 [zero-robotic-arm](https://gitee.com/jmx_123456/zero-robotic-arm) 改进而来。**  
+> 原项目作者：[@jmx_123456](https://gitee.com/jmx_123456)  
+> 原项目地址：https://gitee.com/jmx_123456/zero-robotic-arm  
+> 感谢原作者的开源贡献！
 
-### 第 1 步：编译固件 (2 分钟)
+---
 
-1. 打开 Keil MDK-ARM
-2. 打开工程：`MDK-ARM/STM32F407_CAN_CMD.uvprojx`
-3. **重要**：添加新文件到工程（右键 Application/User 组 → Add Existing Files）：
+## 与原项目的关系
+
+| 项目 | 链接 |
+|------|------|
+| **原项目（上游）** | https://gitee.com/jmx_123456/zero-robotic-arm |
+| **本项目（改进版）** | 当前仓库 |
+
+本项目在原项目的基础上进行了以下改进和移植：
+
+| 改进项 | 说明 |
+|--------|------|
+| **通信平台** | 从 TTL 串口通信改为 **CAN 总线**多机同步控制 |
+| **硬件平台** | 适配 **STM32F407VET6**（HAL 库，Keil MDK-ARM） |
+| **裸机化** | 去掉 FreeRTOS 和 MQTT 依赖，改为裸机运行降低复杂度 |
+| **LCD 显示** | 新增 **2.8寸 ILI9341 LCD**（FSMC 16位并口）实时显示机械臂状态 |
+| **编码器回读** | 新增 `sync_pos` 和 `calibrate` 指令，从电机编码器读取真实角度 |
+| **RL 接口** | 新增 `rl_step` 指令和 Python OpenAI-Gym 风格接口，用于强化学习对接 |
+| **串口指令扩展** | 增加 `sync_pos`、`calibrate`、`demo_*` 等新指令 |
+
+---
+
+## 功能特性
+
+- **6轴机械臂控制**：通过 CAN 总线 500kbps 控制 6 个 Emm V5 闭环步进电机
+- **逆运动学**：Pieper 解析法（DH 参数），支持笛卡尔空间坐标控制
+- **多轴同步**：使用 `Emm_V5_Synchronous_motion` 实现多电机同步运动
+- **LCD 状态显示**：关节角度、末端坐标、指令、状态实时刷新
+- **串口命令行**：115200 波特率，支持多种控制命令
+- **强化学习接口**：Python `robot_rl_interface.py` 提供 Gym 风格环境
+
+---
+
+## 硬件平台
+
+| 组件 | 规格 |
+|------|------|
+| 主控 | STM32F407VET6（LQFP100） |
+| 电机 | 6× Emm V5 闭环步进电机 |
+| 通信 | CAN 总线，500kbps，PB8(RX)/PB9(TX) |
+| 串口 | USART1，115200 baud，PA9(TX)/PA10(RX) |
+| 显示 | 2.8寸 ILI9341 TFT LCD，320×240，FSMC 16位 |
+| 背光 | PA15 GPIO |
+
+---
+
+## 快速上手
+
+### 第 1 步：Keil 工程配置
+
+1. 打开 `MDK-ARM/STM32F407_CAN_CMD.uvprojx`
+2. 添加源文件到 **Application/User** 组：
    ```
    ../Src/robot_config.c
    ../Src/robot_kinematics.c
@@ -15,113 +66,108 @@
    ../Src/robot_sequence.c
    ../Src/usart.c
    ```
-4. **重要**：启用编译器选项：
-   - Target → Use MicroLIB ✅
-   - C/C++ → Use FPU ✅
-5. 编译：`Project → Rebuild all` (F7)
-6. 下载：`Flash → Download` (F8)
-
-### 第 2 步：连接硬件 (2 分钟)
-
-**CAN 总线：**
-```
-STM32 PB8(RX) ─┐
-STM32 PB9(TX) ─┤→ CAN收发器 → 驱动器1(地址1) → ... → 驱动器6(地址6)
-```
-- ⚠️ 两端接 120Ω 终端电阻
-- ⚠️ 驱动器波特率设为 500kbps
-
-**串口：**
-```
-STM32 PA9(TX)  → USB转串口 RX
-STM32 PA10(RX) ← USB转串口 TX
-GND            ─ GND
-```
-
-### 第 3 步：测试 (1 分钟)
-
-1. 打开串口工具（115200 波特率）
-2. 复位 STM32，看到欢迎信息
-3. 输入命令测试：
+3. 新建 **LCD** 组，添加：
    ```
-   status              # 查看当前关节角度
-   rel_rotate 0 10     # 关节 0 转 10 度
+   ../Src/lcd.c
+   ../Src/lcd_font.c
+   ../Src/robot_display.c
    ```
+4. 编译器选项：`Target → Use MicroLIB ✅`，`C/C++ → Use FPU ✅`
+5. `Project → Rebuild all`（F7）→ `Flash → Download`（F8）
 
-## 命令速查表
-
-| 命令 | 示例 | 说明 |
-|------|------|------|
-| `status` | `status` | 显示当前关节角度 |
-| `rel_rotate` | `rel_rotate 0 10` | 关节 0 相对转动 10° |
-| `sync` | `sync 90 90 0 0 90 0` | 所有关节同步到指定角度 |
-| `auto` | `auto 0 -184.5 215.5` | 末端移动到 (x,y,z) 坐标 |
-| `zero` | `zero` | 将当前位置设为零点 |
-| `stop` | `stop` | 急停所有电机 |
-
-## 演示序列
-
-执行内置演示动作：
+### 第 2 步：硬件连接
 
 ```
-demo_joint     # 关节空间演示
-demo_pick      # 取放物演示
-demo_circle    # 圆周运动演示
+CAN 总线：
+  STM32 PB8(RX) ──┐
+  STM32 PB9(TX) ──┤── CAN收发器 ── 驱动器1(addr=1) ── ... ── 驱动器6(addr=6)
+  ⚠️ 两端各接 120Ω 终端电阻，驱动器波特率设为 500kbps
+
+串口（USB 转串口）：
+  STM32 PA9(TX)  → RX
+  STM32 PA10(RX) ← TX
+  GND            ─ GND
+
+LCD（已通过 FSMC 引脚自动初始化，直接接线即可）：
+  见 LCD_KEIL_SETUP.md 引脚对照表
 ```
 
-## 强化学习接入（Python）
+### 第 3 步：串口测试
+
+打开串口工具（115200，发送需附加换行符 `\r\n`）：
+
+```
+status              → 显示当前关节角度（软件追踪）
+sync_pos            → 从编码器读取真实角度并同步
+calibrate 0         → 对比 J0 的软件角度与编码器角度
+zero                → 将当前位置设为零点
+rel_rotate 0 30     → J0 相对转动 30°
+sync 90 90 0 0 90 0 → 6轴同步移动到指定角度
+auto 0 -184.5 215.5 → 末端移动到笛卡尔坐标 (x,y,z)
+stop                → 急停
+```
+
+---
+
+## 串口命令速查
+
+| 命令 | 说明 |
+|------|------|
+| `status` | 显示软件追踪的关节角度 |
+| `sync_pos` | 从电机编码器读取真实角度并更新 |
+| `calibrate <id>` | 显示某轴软件角度 vs 编码器角度对比 |
+| `rel_rotate <id> <deg>` | 指定关节相对转动 |
+| `abs_rotate <id> <deg>` | 指定关节绝对定位 |
+| `sync <a1..a6>` | 6轴同步绝对定位 |
+| `auto <x> <y> <z>` | 笛卡尔空间逆运动学控制 |
+| `zero` | 当前位置设为零点 |
+| `stop` | 急停所有电机 |
+| `demo_joint` | 关节空间演示 |
+| `demo_pick` | 取放物演示 |
+| `rl_step <d1..d6>` | 强化学习增量步 |
+
+---
+
+## 强化学习接口（Python）
 
 ```bash
 pip install pyserial numpy
 python robot_rl_interface.py
 ```
 
-或在代码中：
-
 ```python
 from robot_rl_interface import RobotArmEnv
 
 env = RobotArmEnv(port='COM3')
 obs = env.reset()
-
-for step in range(100):
-    action = [1.0, 0, 0, 0, 0, 0]  # 关节角度增量
+for _ in range(100):
+    action = [1.0, 0, 0, 0, 0, 0]   # 6个关节的角度增量（度）
     obs, reward, done, info = env.step(action)
-    print(f"State: {obs}")
 ```
-
-## 常见问题
-
-### 串口没有输出？
-- 检查 TX/RX 是否交叉连接
-- 确认波特率 115200
-
-### 电机不转？
-- 检查 CAN 接线（CANH、CANL）
-- 确认终端电阻（120Ω）
-- 检查驱动器地址（1~6）
-
-### IK 失败？
-- 先执行 `zero` 命令归零
-- 确认目标点在工作空间内
-- 检查 DH 参数是否与实际机械臂一致
-
-## 详细文档
-
-- **使用手册**：`ROBOT_ARM_GUIDE.md`
-- **测试指南**：`TESTING_GUIDE.md`
-- **编译配置**：`BUILD_GUIDE.md`
-- **移植总结**：`MIGRATION_SUMMARY.md`
-
-## 原项目链接
-
-- Gitee：https://gitee.com/dearxie/zero-robotic-arm
-- B站：https://www.bilibili.com/video/BV1d63Dz7ERN/
-
-## 技术支持
-
-QQ 交流群：1041684044
 
 ---
 
-**开始使用吧！🚀**
+## 致谢 / Credits
+
+本项目的运动学算法、DH 参数、机械臂结构参数均来自原项目：
+
+**zero-robotic-arm** by [@jmx_123456](https://gitee.com/jmx_123456)  
+🔗 https://gitee.com/jmx_123456/zero-robotic-arm
+
+感谢原作者的开源贡献，本项目的改进工作建立在原项目代码的基础上完成。
+
+---
+
+## 详细文档
+
+- **LCD 配置**：`LCD_KEIL_SETUP.md`
+- **角度标定**：`ROBOT_ARM_GUIDE.md`
+- **Keil 工程配置**：`KEIL_SETUP.md`
+- **移植说明**：`MIGRATION_SUMMARY.md`
+- **测试指南**：`TESTING_GUIDE.md`
+
+---
+
+## License
+
+本项目遵循原项目的开源协议。原项目：https://gitee.com/jmx_123456/zero-robotic-arm
