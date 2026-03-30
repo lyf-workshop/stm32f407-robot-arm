@@ -1,0 +1,32 @@
+# ─── Keil MDK-ARM Build Output ─────────────────────────────────────────────
+# Compiled object files, listings, map, binary output
+MDK-ARM/STM32F407_CAN_CMD/
+
+# Keil per-user GUI layout files (editor window positions, etc.)
+MDK-ARM/*.uvguix.*
+
+# JLink debug log
+MDK-ARM/JLinkLog.txt
+MDK-ARM/DebugConfig/
+
+# ─── CMSIS Precompiled Binary Libraries (very large, not needed to compile) ─
+Drivers/CMSIS/Lib/
+Drivers/CMSIS/DSP/DSP_Lib_TestSuite/
+Drivers/CMSIS/DSP/Examples/
+Drivers/CMSIS/NN/
+Drivers/CMSIS/RTOS/
+Drivers/CMSIS/RTOS2/
+
+# Large single DSP data file (~4 MB C source, not needed for our project)
+Drivers/CMSIS/DSP/Source/CommonTables/arm_linear_interp_data.c
+
+# ─── Python ─────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+
+# ─── Editors / IDEs ─────────────────────────────────────────────────────────
+.vscode/
+*.bak
+*.tmp
+Thumbs.db
