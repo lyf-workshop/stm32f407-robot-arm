@@ -34,6 +34,9 @@
 #include "robot_cmd.h"
 #include "robot_display.h"
 #include "usart.h"
+#include "touch.h"
+#include "touch_ui.h"
+#include "touch_calib.h"
 
 /* USER CODE END Includes */
 
@@ -123,6 +126,10 @@ int main(void)
 	// Initialize LCD and draw static UI skeleton
 	RobotDisplay_Init();
 	
+	// Initialize touch controller and draw touch UI
+	Touch_Init();
+	TouchUI_Init();
+	
 	// Initialize UART command parser and show welcome message
 	RobotCmd_Init();
 	
@@ -133,6 +140,9 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+	
+	static Touch_State_t touch_prev = {0};  // Previous touch state for edge detection
+	
   while (1)
   {
     /* USER CODE END WHILE */
@@ -141,8 +151,106 @@ int main(void)
 		
 		// Main loop: command processing is handled in UART interrupt
 
-		// Refresh LCD joint angles every 200 ms
+		// 1. Poll touch input (every 50ms to avoid bouncing)
+		static uint32_t s_last_touch_ms = 0;
 		uint32_t now = HAL_GetTick();
+		
+		if (now - s_last_touch_ms >= 50u) {
+			s_last_touch_ms = now;
+			
+			Touch_State_t touch_current;
+			if (Touch_Read(&touch_current)) {
+				// Check if in calibration mode
+				TouchCalib_State_t calib_state = TouchCalib_GetState();
+				
+				if (calib_state != CALIB_STATE_IDLE && calib_state != CALIB_STATE_DONE) {
+					// Feed raw touch data to calibration process
+					if (touch_current.pressed && !touch_prev.pressed) {
+						bool done = TouchCalib_ProcessTouch(touch_current.raw_x, touch_current.raw_y);
+						if (done) {
+							HAL_Delay(1500);  // Show "Complete" message
+							// Restore UI
+							LCD_Clear(LCD_BLACK);
+							RobotDisplay_Init();
+							TouchUI_Init();
+						}
+					}
+				} else if (calib_state == CALIB_STATE_DONE) {
+					// Wait for any touch to exit calibration screen
+					if (touch_current.pressed && !touch_prev.pressed) {
+						LCD_Clear(LCD_BLACK);
+						RobotDisplay_Init();
+						TouchUI_Init();
+					}
+				} else {
+					// Normal UI mode: detect touch press (rising edge)
+					if (touch_current.pressed && !touch_prev.pressed) {
+						TouchUI_Event_t event = TouchUI_HandleTouch(touch_current.x, touch_current.y);
+						
+						// Handle button events
+						float step = TouchUI_GetStepSize();
+						switch (event) {
+							case BTN_EVENT_J1_PLUS:
+								RobotCtrl_MoveJointRelative(0, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J1_MINUS:
+								RobotCtrl_MoveJointRelative(0, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J2_PLUS:
+								RobotCtrl_MoveJointRelative(1, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J2_MINUS:
+								RobotCtrl_MoveJointRelative(1, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J3_PLUS:
+								RobotCtrl_MoveJointRelative(2, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J3_MINUS:
+								RobotCtrl_MoveJointRelative(2, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J4_PLUS:
+								RobotCtrl_MoveJointRelative(3, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J4_MINUS:
+								RobotCtrl_MoveJointRelative(3, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J5_PLUS:
+								RobotCtrl_MoveJointRelative(4, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J5_MINUS:
+								RobotCtrl_MoveJointRelative(4, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J6_PLUS:
+								RobotCtrl_MoveJointRelative(5, step, 30.0f, 50);
+								break;
+							case BTN_EVENT_J6_MINUS:
+								RobotCtrl_MoveJointRelative(5, -step, 30.0f, 50);
+								break;
+							case BTN_EVENT_ZERO:
+								RobotCtrl_SetCurrentAsZero();
+								RobotDisplay_UpdateStatus("OK: Zero set", 0);
+								break;
+							case BTN_EVENT_STOP:
+								RobotCtrl_StopAll();
+								RobotDisplay_UpdateStatus("STOPPED", 1);
+								break;
+							case BTN_EVENT_STATUS:
+								RobotCtrl_SyncAnglesFromMotors();
+								RobotDisplay_UpdateStatus("Sync OK", 0);
+								break;
+							default:
+								// Step size buttons are handled inside TouchUI_HandleTouch
+								break;
+						}
+					}
+				}
+				touch_prev = touch_current;
+			} else {
+				touch_prev.pressed = false;
+			}
+		}
+		
+		// 2. Refresh LCD joint angles every 200 ms
 		if (now - s_last_display_ms >= 200u) {
 			s_last_display_ms = now;
 			float display_angles[6];

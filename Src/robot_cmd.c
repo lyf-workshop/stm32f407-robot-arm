@@ -9,6 +9,7 @@
 #include "robot_control.h"
 #include "robot_sequence.h"
 #include "robot_display.h"
+#include "touch_calib.h"
 #include "usart.h"
 #include <stdio.h>
 #include <string.h>
@@ -32,6 +33,7 @@ void RobotCmd_Init(void)
     RobotCmd_SendResponse("  status                          - Show joint angles (software)\r\n");
     RobotCmd_SendResponse("  sync_pos                        - Read actual angles from encoders\r\n");
     RobotCmd_SendResponse("  calibrate <joint_id>            - Compare SW vs encoder angle\r\n");
+    RobotCmd_SendResponse("  touch_calib                     - Start touch screen calibration\r\n");
     RobotCmd_SendResponse("  rl_step <d1> <d2> <d3> <d4> <d5> <d6> - RL action step\r\n");
     RobotCmd_SendResponse("  demo_joint                      - Run joint space demo\r\n");
     RobotCmd_SendResponse("  demo_pick                       - Run pick-and-place demo\r\n");
@@ -312,6 +314,10 @@ static void execute_command(char *cmd_line)
         } else {
             RobotCmd_SendResponse("Error: Demo failed\r\n");
         }
+    } else if (strcmp(cmd, "touch_calib") == 0) {
+        RobotCmd_SendResponse("Starting touch calibration...\r\n");
+        RobotCmd_SendResponse("Follow on-screen instructions\r\n");
+        TouchCalib_Start();
     } else {
         RobotCmd_SendResponse("Error: Unknown command\r\n");
     }

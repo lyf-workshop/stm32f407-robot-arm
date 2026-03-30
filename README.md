@@ -22,9 +22,10 @@
 | **硬件平台** | 适配 **STM32F407VET6**（HAL 库，Keil MDK-ARM） |
 | **裸机化** | 去掉 FreeRTOS 和 MQTT 依赖，改为裸机运行降低复杂度 |
 | **LCD 显示** | 新增 **2.8寸 ILI9341 LCD**（FSMC 16位并口）实时显示机械臂状态 |
+| **触摸控制** | 新增 **XPT2046 触摸屏**（SPI），支持触摸按钮点动控制 |
 | **编码器回读** | 新增 `sync_pos` 和 `calibrate` 指令，从电机编码器读取真实角度 |
 | **RL 接口** | 新增 `rl_step` 指令和 Python OpenAI-Gym 风格接口，用于强化学习对接 |
-| **串口指令扩展** | 增加 `sync_pos`、`calibrate`、`demo_*` 等新指令 |
+| **串口指令扩展** | 增加 `sync_pos`、`calibrate`、`touch_calib`、`demo_*` 等新指令 |
 
 ---
 
@@ -34,6 +35,8 @@
 - **逆运动学**：Pieper 解析法（DH 参数），支持笛卡尔空间坐标控制
 - **多轴同步**：使用 `Emm_V5_Synchronous_motion` 实现多电机同步运动
 - **LCD 状态显示**：关节角度、末端坐标、指令、状态实时刷新
+- **触摸控制**：XPT2046 电阻式触摸屏，支持虚拟按钮点动控制（J1~J6 +/-）
+- **触摸校准**：4点校准算法，自动计算仿射变换矩阵
 - **串口命令行**：115200 波特率，支持多种控制命令
 - **强化学习接口**：Python `robot_rl_interface.py` 提供 Gym 风格环境
 
@@ -48,6 +51,7 @@
 | 通信 | CAN 总线，500kbps，PB8(RX)/PB9(TX) |
 | 串口 | USART1，115200 baud，PA9(TX)/PA10(RX) |
 | 显示 | 2.8寸 ILI9341 TFT LCD，320×240，FSMC 16位 |
+| 触摸 | XPT2046 电阻式触摸，软件SPI（PD13/PE0/PE2/PE3）|
 | 背光 | PA15 GPIO |
 
 ---
@@ -71,6 +75,9 @@
    ../Src/lcd.c
    ../Src/lcd_font.c
    ../Src/robot_display.c
+   ../Src/touch.c
+   ../Src/touch_ui.c
+   ../Src/touch_calib.c
    ```
 4. 编译器选项：`Target → Use MicroLIB ✅`，`C/C++ → Use FPU ✅`
 5. `Project → Rebuild all`（F7）→ `Flash → Download`（F8）
@@ -105,7 +112,17 @@ rel_rotate 0 30     → J0 相对转动 30°
 sync 90 90 0 0 90 0 → 6轴同步移动到指定角度
 auto 0 -184.5 215.5 → 末端移动到笛卡尔坐标 (x,y,z)
 stop                → 急停
+touch_calib         → 触摸屏4点校准（在LCD上操作）
 ```
+
+### 第 4 步：触摸控制测试
+
+1. **选择步长**：触摸底部 `5deg` 按钮（黄色高亮表示已选中）
+2. **点动关节**：触摸 `J1+` 使关节1正转5度，触摸 `J1-` 反转5度
+3. **归零**：移动到合适位置后，触摸 `ZERO` 按钮
+4. **同步角度**：触摸 `STATUS` 按钮从编码器读取真实位置
+
+如果触摸位置不准，串口发送 `touch_calib` 命令，在屏幕上依次点击4个十字完成校准。
 
 ---
 
@@ -116,6 +133,7 @@ stop                → 急停
 | `status` | 显示软件追踪的关节角度 |
 | `sync_pos` | 从电机编码器读取真实角度并更新 |
 | `calibrate <id>` | 显示某轴软件角度 vs 编码器角度对比 |
+| `touch_calib` | 触摸屏4点校准（在LCD上点击十字）|
 | `rel_rotate <id> <deg>` | 指定关节相对转动 |
 | `abs_rotate <id> <deg>` | 指定关节绝对定位 |
 | `sync <a1..a6>` | 6轴同步绝对定位 |
@@ -161,6 +179,7 @@ for _ in range(100):
 ## 详细文档
 
 - **LCD 配置**：`LCD_KEIL_SETUP.md`
+- **触摸控制**：`TOUCH_GUIDE.md`
 - **角度标定**：`ROBOT_ARM_GUIDE.md`
 - **Keil 工程配置**：`KEIL_SETUP.md`
 - **移植说明**：`MIGRATION_SUMMARY.md`
