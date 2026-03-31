@@ -32,6 +32,7 @@
 #include "robot_control.h"
 #include "robot_kinematics.h"
 #include "robot_cmd.h"
+#include "lcd.h"
 #include "robot_display.h"
 #include "usart.h"
 #include "touch.h"

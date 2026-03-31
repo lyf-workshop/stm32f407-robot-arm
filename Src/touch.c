@@ -94,26 +94,41 @@ static uint8_t spi_transfer(uint8_t data)
 
 /* --------------------------------------------------------------------------
  * XPT2046 read raw ADC (12-bit)
+ *
+ * XPT2046 MISO output format after command byte (16 bits total):
+ *   Bit 15: null (0)
+ *   Bits 14..3: D11..D0 (12-bit result, MSB first)
+ *   Bits 2..0: null (0)
+ *
+ * Combined 16-bit: [null][D11..D0][0][0][0]
+ * Correct 12-bit value: ((msb << 8) | lsb) >> 3
  * -------------------------------------------------------------------------- */
 static uint16_t xpt2046_read_adc(uint8_t cmd)
 {
     uint16_t val = 0;
-    
+
     TOUCH_CS_LOW();
     spi_delay();
-    
+
     /* Send command byte */
     spi_transfer(cmd);
-    
-    /* Read 12-bit result (MSB first, ignore lower 3 bits) */
+
+    /* Wait for XPT2046 ADC conversion (~2.5us max) */
+    spi_delay();
+    spi_delay();
+    spi_delay();
+
+    /* Read 16-bit result: [null][D11..D0][0][0][0] */
     uint8_t msb = spi_transfer(0x00);
     uint8_t lsb = spi_transfer(0x00);
-    
-    val = ((uint16_t)msb << 4) | ((uint16_t)lsb >> 4);
-    
+
+    /* Correct 12-bit extraction: discard null bit (bit15) and 3 trailing zeros */
+    val = (((uint16_t)msb << 8) | (uint16_t)lsb) >> 3;
+    if (val > 4095) val = 4095;  /* clamp to 12-bit */
+
     spi_delay();
     TOUCH_CS_HIGH();
-    
+
     return val;
 }
 
@@ -205,14 +220,18 @@ void Touch_Init(void)
 
 bool Touch_IsPressed(void)
 {
-    /* Read X position to check if touch is present */
+    /* Read X position to check if touch is present.
+     * XPT2046 without touch: MISO floats / outputs near rail (0 or 4095).
+     * Valid touch range is roughly 100~3995 for 12-bit result. */
     uint16_t x1 = xpt2046_read_adc(XPT2046_CMD_X);
-    
-    /* If ADC reads near rail (< 100 or > 3995), no valid touch */
-    if (x1 < 100 || x1 > 3995) {
+    if (x1 < 80 || x1 > 4010) {
         return false;
     }
-    
+    /* Confirm with Y too, reducing false positives */
+    uint16_t y1 = xpt2046_read_adc(XPT2046_CMD_Y);
+    if (y1 < 80 || y1 > 4010) {
+        return false;
+    }
     return true;
 }
 
@@ -235,7 +254,7 @@ bool Touch_Read(Touch_State_t *state)
     uint16_t raw_y = median_filter(y1, y2, y3);
     
     /* Check if valid touch (not at rail) */
-    if (raw_x < 100 || raw_x > 3995 || raw_y < 100 || raw_y > 3995) {
+    if (raw_x < 80 || raw_x > 4010 || raw_y < 80 || raw_y > 4010) {
         state->pressed = false;
         state->x = 0;
         state->y = 0;
@@ -280,4 +299,12 @@ void Touch_SetCalibration(const int32_t a[6])
 void Touch_GetDefaultCalibration(int32_t a[6])
 {
     memcpy(a, s_default_calib, sizeof(s_default_calib));
+}
+
+void Touch_ReadRaw(uint16_t *raw_x, uint16_t *raw_y)
+{
+    if (!raw_x || !raw_y) return;
+    /* Read single sample without filtering for diagnosis */
+    *raw_x = xpt2046_read_adc(XPT2046_CMD_X);
+    *raw_y = xpt2046_read_adc(XPT2046_CMD_Y);
 }

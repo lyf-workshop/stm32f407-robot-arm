@@ -10,6 +10,7 @@
 #include "robot_sequence.h"
 #include "robot_display.h"
 #include "touch_calib.h"
+#include "touch.h"
 #include "usart.h"
 #include <stdio.h>
 #include <string.h>
@@ -34,6 +35,7 @@ void RobotCmd_Init(void)
     RobotCmd_SendResponse("  sync_pos                        - Read actual angles from encoders\r\n");
     RobotCmd_SendResponse("  calibrate <joint_id>            - Compare SW vs encoder angle\r\n");
     RobotCmd_SendResponse("  touch_calib                     - Start touch screen calibration\r\n");
+    RobotCmd_SendResponse("  touch_test                      - Print raw ADC values (10 samples)\r\n");
     RobotCmd_SendResponse("  rl_step <d1> <d2> <d3> <d4> <d5> <d6> - RL action step\r\n");
     RobotCmd_SendResponse("  demo_joint                      - Run joint space demo\r\n");
     RobotCmd_SendResponse("  demo_pick                       - Run pick-and-place demo\r\n");
@@ -318,6 +320,33 @@ static void execute_command(char *cmd_line)
         RobotCmd_SendResponse("Starting touch calibration...\r\n");
         RobotCmd_SendResponse("Follow on-screen instructions\r\n");
         TouchCalib_Start();
+    } else if (strcmp(cmd, "touch_test") == 0) {
+        /* Print 10 raw ADC samples to diagnose touch hardware */
+        RobotCmd_SendResponse("Touch test: press and release screen 10 times\r\n");
+        RobotCmd_SendResponse("Format: raw_X  raw_Y\r\n");
+        RobotCmd_SendResponse("Valid range: 80~4010 (0 or 4095 = not touched)\r\n");
+        char buf[64];
+        for (int i = 0; i < 10; i++) {
+            HAL_Delay(500);
+            uint16_t rx, ry;
+            Touch_ReadRaw(&rx, &ry);
+            /* Format numbers manually (no printf) */
+            const char *hex = "0123456789";
+            buf[0] = 'X'; buf[1] = ':';
+            buf[2] = hex[(rx / 1000) % 10];
+            buf[3] = hex[(rx / 100)  % 10];
+            buf[4] = hex[(rx / 10)   % 10];
+            buf[5] = hex[ rx         % 10];
+            buf[6] = ' '; buf[7] = ' ';
+            buf[8] = 'Y'; buf[9] = ':';
+            buf[10] = hex[(ry / 1000) % 10];
+            buf[11] = hex[(ry / 100)  % 10];
+            buf[12] = hex[(ry / 10)   % 10];
+            buf[13] = hex[ ry         % 10];
+            buf[14] = '\r'; buf[15] = '\n'; buf[16] = '\0';
+            HAL_UART_Transmit(&huart1, (uint8_t*)buf, 16, 50);
+        }
+        RobotCmd_SendResponse("OK: touch_test done\r\n");
     } else {
         RobotCmd_SendResponse("Error: Unknown command\r\n");
     }

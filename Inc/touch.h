@@ -84,4 +84,11 @@ void Touch_SetCalibration(const int32_t a[6]);
  */
 void Touch_GetDefaultCalibration(int32_t a[6]);
 
+/**
+ * @brief Read raw ADC values (for diagnosis). Does NOT apply calibration.
+ * @param raw_x  Output: raw X ADC (0~4095, 0xFFFF if not touched)
+ * @param raw_y  Output: raw Y ADC (0~4095, 0xFFFF if not touched)
+ */
+void Touch_ReadRaw(uint16_t *raw_x, uint16_t *raw_y);
+
 #endif /* __TOUCH_H */
