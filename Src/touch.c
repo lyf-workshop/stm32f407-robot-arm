@@ -8,19 +8,27 @@
 #include <string.h>
 
 /* --------------------------------------------------------------------------
- * Pin definitions (software SPI on PD13, PE0, PE2, PE3)
+ * Pin definitions (software SPI), confirmed from official bsp_XPT2046.h:
+ *   CS   = PD13  (Chip Select, active low)
+ *   CLK  = PE0   (SPI clock)
+ *   MOSI = PE2   (Master Out Slave In)
+ *   MISO = PE3   (Master In Slave Out)
+ *   IRQ  = PE4   (PENIRQ#, active low when touched)
  * -------------------------------------------------------------------------- */
-#define TOUCH_CLK_PORT   GPIOD
-#define TOUCH_CLK_PIN    GPIO_PIN_13
+#define TOUCH_CS_PORT    GPIOD
+#define TOUCH_CS_PIN     GPIO_PIN_13
 
-#define TOUCH_CS_PORT    GPIOE
-#define TOUCH_CS_PIN     GPIO_PIN_0
+#define TOUCH_CLK_PORT   GPIOE
+#define TOUCH_CLK_PIN    GPIO_PIN_0
 
 #define TOUCH_MOSI_PORT  GPIOE
 #define TOUCH_MOSI_PIN   GPIO_PIN_2
 
 #define TOUCH_MISO_PORT  GPIOE
 #define TOUCH_MISO_PIN   GPIO_PIN_3
+
+#define TOUCH_IRQ_PORT   GPIOE
+#define TOUCH_IRQ_PIN    GPIO_PIN_4
 
 #define TOUCH_CS_LOW()   HAL_GPIO_WritePin(TOUCH_CS_PORT, TOUCH_CS_PIN, GPIO_PIN_RESET)
 #define TOUCH_CS_HIGH()  HAL_GPIO_WritePin(TOUCH_CS_PORT, TOUCH_CS_PIN, GPIO_PIN_SET)
@@ -185,81 +193,85 @@ static void apply_calibration(uint16_t raw_x, uint16_t raw_y, uint16_t *lcd_x, u
 void Touch_Init(void)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
-    
+
     /* Enable GPIO clocks */
     __HAL_RCC_GPIOD_CLK_ENABLE();
     __HAL_RCC_GPIOE_CLK_ENABLE();
-    
-    /* Configure CLK, CS, MOSI as output */
+
+    /* Configure CS (PD13), CLK (PE0), MOSI (PE2) as push-pull output */
     GPIO_InitStruct.Mode  = GPIO_MODE_OUTPUT_PP;
     GPIO_InitStruct.Pull  = GPIO_NOPULL;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-    
-    GPIO_InitStruct.Pin = TOUCH_CLK_PIN;
-    HAL_GPIO_Init(TOUCH_CLK_PORT, &GPIO_InitStruct);
-    
+
     GPIO_InitStruct.Pin = TOUCH_CS_PIN;
     HAL_GPIO_Init(TOUCH_CS_PORT, &GPIO_InitStruct);
-    
+
+    GPIO_InitStruct.Pin = TOUCH_CLK_PIN;
+    HAL_GPIO_Init(TOUCH_CLK_PORT, &GPIO_InitStruct);
+
     GPIO_InitStruct.Pin = TOUCH_MOSI_PIN;
     HAL_GPIO_Init(TOUCH_MOSI_PORT, &GPIO_InitStruct);
-    
-    /* Configure MISO as input with pull-up */
+
+    /* Configure MISO (PE3) as input with pull-up */
     GPIO_InitStruct.Pin  = TOUCH_MISO_PIN;
     GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
     GPIO_InitStruct.Pull = GPIO_PULLUP;
     HAL_GPIO_Init(TOUCH_MISO_PORT, &GPIO_InitStruct);
-    
+
+    /* Configure IRQ (PE4) as input with pull-up (PENIRQ# active low) */
+    GPIO_InitStruct.Pin  = TOUCH_IRQ_PIN;
+    GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+    GPIO_InitStruct.Pull = GPIO_PULLUP;
+    HAL_GPIO_Init(TOUCH_IRQ_PORT, &GPIO_InitStruct);
+
     /* Idle state: CS high, CLK low */
     TOUCH_CS_HIGH();
     TOUCH_CLK_LOW();
-    
+
     /* Load calibration from FLASH or use defaults */
     Touch_LoadCalibration();
 }
 
 bool Touch_IsPressed(void)
 {
-    /* Read X position to check if touch is present.
-     * XPT2046 without touch: MISO floats / outputs near rail (0 or 4095).
-     * Valid touch range is roughly 100~3995 for 12-bit result. */
-    uint16_t x1 = xpt2046_read_adc(XPT2046_CMD_X);
-    if (x1 < 80 || x1 > 4010) {
-        return false;
-    }
-    /* Confirm with Y too, reducing false positives */
-    uint16_t y1 = xpt2046_read_adc(XPT2046_CMD_Y);
-    if (y1 < 80 || y1 > 4010) {
-        return false;
-    }
-    return true;
+    /* Use PENIRQ# pin (PE4) for reliable touch detection.
+     * XPT2046 pulls PE4 LOW when the screen is being touched. */
+    return (HAL_GPIO_ReadPin(TOUCH_IRQ_PORT, TOUCH_IRQ_PIN) == GPIO_PIN_RESET);
 }
 
 bool Touch_Read(Touch_State_t *state)
 {
     if (!state) return false;
-    
-    /* Read X and Y multiple times for median filtering */
-    uint16_t x1 = xpt2046_read_adc(XPT2046_CMD_X);
-    uint16_t y1 = xpt2046_read_adc(XPT2046_CMD_Y);
-    
-    uint16_t x2 = xpt2046_read_adc(XPT2046_CMD_X);
-    uint16_t y2 = xpt2046_read_adc(XPT2046_CMD_Y);
-    
-    uint16_t x3 = xpt2046_read_adc(XPT2046_CMD_X);
-    uint16_t y3 = xpt2046_read_adc(XPT2046_CMD_Y);
-    
-    /* Median filter to reduce noise */
-    uint16_t raw_x = median_filter(x1, x2, x3);
-    uint16_t raw_y = median_filter(y1, y2, y3);
-    
-    /* Check if valid touch (not at rail) */
-    if (raw_x < 80 || raw_x > 4010 || raw_y < 80 || raw_y > 4010) {
+
+    /* Use PENIRQ# (PE4) for reliable touch detection */
+    if (!Touch_IsPressed()) {
         state->pressed = false;
         state->x = 0;
         state->y = 0;
         state->raw_x = 0;
         state->raw_y = 0;
+        return false;
+    }
+
+    /* Read X and Y three times for median filtering */
+    uint16_t x1 = xpt2046_read_adc(XPT2046_CMD_X);
+    uint16_t y1 = xpt2046_read_adc(XPT2046_CMD_Y);
+
+    uint16_t x2 = xpt2046_read_adc(XPT2046_CMD_X);
+    uint16_t y2 = xpt2046_read_adc(XPT2046_CMD_Y);
+
+    uint16_t x3 = xpt2046_read_adc(XPT2046_CMD_X);
+    uint16_t y3 = xpt2046_read_adc(XPT2046_CMD_Y);
+
+    /* Median filter to reduce noise */
+    uint16_t raw_x = median_filter(x1, x2, x3);
+    uint16_t raw_y = median_filter(y1, y2, y3);
+
+    /* Double-check IRQ is still low (reject if released mid-read) */
+    if (!Touch_IsPressed()) {
+        state->pressed = false;
+        state->x = 0; state->y = 0;
+        state->raw_x = 0; state->raw_y = 0;
         return false;
     }
     

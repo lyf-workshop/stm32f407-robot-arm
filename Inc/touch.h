@@ -2,12 +2,12 @@
  * @file    touch.h
  * @brief   XPT2046 Resistive Touch Controller Driver (SPI interface)
  *
- * Hardware mapping (per pin table):
- *   T_CLK  = PD13  (SPI_SCK, software SPI)
- *   T_CS   = PE0   (Chip Select, active low)
+ * Hardware mapping (confirmed from official bsp_XPT2046.h):
+ *   T_CS   = PD13  (Chip Select, active low)
+ *   T_CLK  = PE0   (SPI clock)
  *   T_MOSI = PE2   (Master Out Slave In)
  *   T_MISO = PE3   (Master In Slave Out)
- *   T_PEN  = Not used (optional IRQ, we use polling mode)
+ *   T_IRQ  = PE4   (PENIRQ#, active low when touched)
  *
  * Coordinate system:
  *   Raw ADC: 12-bit (0~4095) for X and Y
