@@ -41,25 +41,40 @@
 
 #define TOUCH_MISO_READ() HAL_GPIO_ReadPin(TOUCH_MISO_PORT, TOUCH_MISO_PIN)
 
-/* XPT2046 control byte commands */
-#define XPT2046_CMD_X    0xD0  /* Measure X position (12-bit) */
-#define XPT2046_CMD_Y    0x90  /* Measure Y position (12-bit) */
+/* XPT2046 control byte commands (landscape mode)
+ *
+ * Per official bsp_XPT2046.c: in landscape (dir=1),
+ *   LCD X axis ← 0x90 command (physical Y+ channel)
+ *   LCD Y axis ← 0xD0 command (physical X+ channel)
+ *
+ * 0x90 = S=1, A2=0,A1=0,A0=1 (Y+), MODE=0(12bit), SER=0(diff), PD=00
+ * 0xD0 = S=1, A2=1,A1=0,A0=1 (X+), MODE=0(12bit), SER=0(diff), PD=00
+ */
+#define XPT2046_CMD_X    0x90  /* LCD X: physical Y+ channel */
+#define XPT2046_CMD_Y    0xD0  /* LCD Y: physical X+ channel */
 
 /* Calibration storage */
 static Touch_Calib_t g_touch_cal = {0};
 
-/* Default calibration for typical 2.8" XPT2046+ILI9341 (landscape 320x240) */
+/* Default calibration for typical 2.8" XPT2046+ILI9341 (landscape 320x240)
+ *
+ * From official driver default (landscape):
+ *   xfac = 0.09184,  xoff = 338  →  lcdX = adcX * 0.09184 + 338  (inverted X)
+ *   yfac = 0.077956,  yoff = -45  →  lcdY = adcY * 0.077956 - 45
+ *
+ * But these are for their specific panel. We use a reasonable estimate
+ * assuming raw range ~200-3900 mapping to 0-319 (X) and 0-239 (Y).
+ * User should run touch_calib for best accuracy.
+ */
 static const int32_t s_default_calib[6] = {
-    /* These are empirical values, user may need to run calibration */
     /* Transform: LCD_x = (a[0]*raw_x + a[1]*raw_y + a[2]) / 65536 */
     /*            LCD_y = (a[3]*raw_x + a[4]*raw_y + a[5]) / 65536 */
-    /* Typical XPT2046: raw X ~200-3900, raw Y ~200-3900 */
-    5734,   /* a[0] = 320 / (3900-200) * 65536 ≈ 5734 */
-    0,      /* a[1] = 0 (no skew) */
-    -1146880,  /* a[2] = -200 * a[0] ≈ -1146880 */
-    0,      /* a[3] = 0 (no skew) */
-    3502,   /* a[4] = 240 / (3900-200) * 65536 ≈ 4267, inverted = -4267, but Y is typically inverted */
-    -700960   /* a[5] = -200 * a[4] */
+    5653,      /* a[0] = 320 / (3700) * 65536 ≈ 5653 */
+    0,         /* a[1] = 0 (no skew) */
+    -1130600,  /* a[2] = -200 * a[0] */
+    0,         /* a[3] = 0 (no skew) */
+    4249,      /* a[4] = 240 / (3700) * 65536 ≈ 4249 */
+    -849800    /* a[5] = -200 * a[4] */
 };
 
 /* --------------------------------------------------------------------------

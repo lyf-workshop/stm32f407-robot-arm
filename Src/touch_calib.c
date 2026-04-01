@@ -182,5 +182,4 @@ TouchCalib_State_t TouchCalib_GetState(void)
 void TouchCalib_Cancel(void)
 {
     s_state = CALIB_STATE_IDLE;
-    LCD_Clear(LCD_BLACK);
 }

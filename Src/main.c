@@ -169,16 +169,17 @@ int main(void)
 					if (touch_current.pressed && !touch_prev.pressed) {
 						bool done = TouchCalib_ProcessTouch(touch_current.raw_x, touch_current.raw_y);
 						if (done) {
-							HAL_Delay(1500);  // Show "Complete" message
-							// Restore UI
+							HAL_Delay(1500);
+							TouchCalib_Cancel();  // Reset state to IDLE
 							LCD_Clear(LCD_BLACK);
 							RobotDisplay_Init();
 							TouchUI_Init();
 						}
 					}
 				} else if (calib_state == CALIB_STATE_DONE) {
-					// Wait for any touch to exit calibration screen
+					// Touch to exit calibration "Complete" screen
 					if (touch_current.pressed && !touch_prev.pressed) {
+						TouchCalib_Cancel();  // Reset state to IDLE so we enter normal mode next time
 						LCD_Clear(LCD_BLACK);
 						RobotDisplay_Init();
 						TouchUI_Init();
