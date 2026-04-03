@@ -1,11 +1,13 @@
 /**
  * @file    touch_ui.h
- * @brief   Touch UI components for robot arm control
+ * @brief   Unified Touch UI for robot arm control (320x240 landscape)
  *
- * Provides virtual buttons for jog control:
- *   - 6 joints: J1~J6, each with + / - buttons
- *   - Common controls: Zero, Stop, Status
- *   - Step size selector: 1°, 5°, 10°, 30°
+ * This module provides:
+ *   - Virtual jog buttons for J1~J6 (+/- per joint)
+ *   - Control buttons: ZERO, STOP, SYNC
+ *   - Step size selector: 1, 5, 10, 30 degrees
+ *   - Integrated info panel: joint angles + status line
+ *   - Title bar with step badge and mode indicator
  */
 
 #ifndef __TOUCH_UI_H
@@ -14,9 +16,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* --------------------------------------------------------------------------
- * Button event types
- * -------------------------------------------------------------------------- */
+/* ---- Mode constants (compatible with old robot_display.h) --------------- */
+#define RDISP_MODE_IDLE     0
+#define RDISP_MODE_RUNNING  1
+#define RDISP_MODE_ERROR    2
+
+/* ---- Button event types ------------------------------------------------- */
 typedef enum {
     BTN_EVENT_NONE = 0,
     BTN_EVENT_J1_PLUS,
@@ -34,38 +39,35 @@ typedef enum {
     BTN_EVENT_ZERO,
     BTN_EVENT_STOP,
     BTN_EVENT_STATUS,
-    BTN_EVENT_STEP_1,    /* Select 1° step */
-    BTN_EVENT_STEP_5,    /* Select 5° step */
-    BTN_EVENT_STEP_10,   /* Select 10° step */
-    BTN_EVENT_STEP_30    /* Select 30° step */
+    BTN_EVENT_STEP_1,
+    BTN_EVENT_STEP_5,
+    BTN_EVENT_STEP_10,
+    BTN_EVENT_STEP_30
 } TouchUI_Event_t;
 
-/* --------------------------------------------------------------------------
- * Public API
- * -------------------------------------------------------------------------- */
+/* ---- Core UI ------------------------------------------------------------ */
 
-/**
- * @brief Initialize touch UI (draw buttons on screen)
- */
+/** Initialize LCD, draw full UI (title + info panel + buttons). */
 void TouchUI_Init(void);
 
-/**
- * @brief Handle touch input and return button event
- * @param x LCD X coordinate (0~319)
- * @param y LCD Y coordinate (0~239)
- * @return Button event (BTN_EVENT_NONE if no button hit)
- */
+/** Process a touch at (x,y) and return the button event. */
 TouchUI_Event_t TouchUI_HandleTouch(uint16_t x, uint16_t y);
 
-/**
- * @brief Get current step size (degrees)
- * @return Current step size (1, 5, 10, or 30)
- */
+/** Get current step size in degrees. */
 float TouchUI_GetStepSize(void);
 
-/**
- * @brief Redraw the UI (call after screen updates)
- */
+/** Full UI redraw (e.g. after calibration or screen clear). */
 void TouchUI_Redraw(void);
+
+/* ---- Info panel updates ------------------------------------------------- */
+
+/** Update the six joint angle fields in the info panel. */
+void TouchUI_UpdateJoints(const float angles[6]);
+
+/** Update the status line (green or red text). */
+void TouchUI_UpdateStatus(const char *text, uint8_t is_error);
+
+/** Update the mode badge [IDL] / [RUN] / [ERR] in the title bar. */
+void TouchUI_SetMode(uint8_t mode);
 
 #endif /* __TOUCH_UI_H */

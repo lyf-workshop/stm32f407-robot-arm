@@ -578,6 +578,21 @@
               <FileType>1</FileType>
               <FilePath>..\Src\robot_display.c</FilePath>
             </File>
+            <File>
+              <FileName>touch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\touch.c</FilePath>
+            </File>
+            <File>
+              <FileName>touch_calib.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\touch_calib.c</FilePath>
+            </File>
+            <File>
+              <FileName>touch_ui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\Src\touch_ui.c</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

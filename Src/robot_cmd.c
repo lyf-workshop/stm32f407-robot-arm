@@ -8,7 +8,7 @@
 #include "robot_cmd.h"
 #include "robot_control.h"
 #include "robot_sequence.h"
-#include "robot_display.h"
+#include "touch_ui.h"
 #include "touch_calib.h"
 #include "touch.h"
 #include "usart.h"
@@ -56,8 +56,8 @@ void RobotCmd_SendResponse(const char *msg)
             sts[i] = msg[i]; i++;
         }
         sts[i] = '\0';
-        RobotDisplay_UpdateStatus(sts, 0);
-        RobotDisplay_SetMode(RDISP_MODE_IDLE);
+        TouchUI_UpdateStatus(sts, 0);
+        TouchUI_SetMode(RDISP_MODE_IDLE);
     } else if (strncmp(msg, "Error", 5) == 0) {
         char sts[40];
         uint8_t i = 0;
@@ -65,8 +65,8 @@ void RobotCmd_SendResponse(const char *msg)
             sts[i] = msg[i]; i++;
         }
         sts[i] = '\0';
-        RobotDisplay_UpdateStatus(sts, 1);
-        RobotDisplay_SetMode(RDISP_MODE_ERROR);
+        TouchUI_UpdateStatus(sts, 1);
+        TouchUI_SetMode(RDISP_MODE_ERROR);
     }
 }
 
@@ -261,9 +261,7 @@ static void parse_stop(void)
 
 static void execute_command(char *cmd_line)
 {
-    /* Show the received command on LCD before parsing */
-    RobotDisplay_UpdateCmd(cmd_line);
-    RobotDisplay_SetMode(RDISP_MODE_RUNNING);
+    TouchUI_SetMode(RDISP_MODE_RUNNING);
 
     char *cmd = strtok(cmd_line, " \r\n");
     char *args = strtok(NULL, "\r\n");

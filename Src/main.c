@@ -33,7 +33,6 @@
 #include "robot_kinematics.h"
 #include "robot_cmd.h"
 #include "lcd.h"
-#include "robot_display.h"
 #include "usart.h"
 #include "touch.h"
 #include "touch_ui.h"
@@ -124,10 +123,7 @@ int main(void)
 	// Initialize robot arm control system
 	RobotCtrl_Init();
 	
-	// Initialize LCD and draw static UI skeleton
-	RobotDisplay_Init();
-	
-	// Initialize touch controller and draw touch UI
+	// Initialize LCD, touch controller and unified UI
 	Touch_Init();
 	TouchUI_Init();
 	
@@ -170,18 +166,16 @@ int main(void)
 						bool done = TouchCalib_ProcessTouch(touch_current.raw_x, touch_current.raw_y);
 						if (done) {
 							HAL_Delay(1500);
-							TouchCalib_Cancel();  // Reset state to IDLE
+							TouchCalib_Cancel();
 							LCD_Clear(LCD_BLACK);
-							RobotDisplay_Init();
 							TouchUI_Init();
 						}
 					}
 				} else if (calib_state == CALIB_STATE_DONE) {
 					// Touch to exit calibration "Complete" screen
 					if (touch_current.pressed && !touch_prev.pressed) {
-						TouchCalib_Cancel();  // Reset state to IDLE so we enter normal mode next time
+						TouchCalib_Cancel();
 						LCD_Clear(LCD_BLACK);
-						RobotDisplay_Init();
 						TouchUI_Init();
 					}
 				} else {
@@ -230,15 +224,15 @@ int main(void)
 								break;
 							case BTN_EVENT_ZERO:
 								RobotCtrl_SetCurrentAsZero();
-								RobotDisplay_UpdateStatus("OK: Zero set", 0);
+								TouchUI_UpdateStatus("Zero set", 0);
 								break;
 							case BTN_EVENT_STOP:
 								RobotCtrl_StopAll();
-								RobotDisplay_UpdateStatus("STOPPED", 1);
+								TouchUI_UpdateStatus("STOPPED", 1);
 								break;
 							case BTN_EVENT_STATUS:
 								RobotCtrl_SyncAnglesFromMotors();
-								RobotDisplay_UpdateStatus("Sync OK", 0);
+								TouchUI_UpdateStatus("Sync OK", 0);
 								break;
 							default:
 								// Step size buttons are handled inside TouchUI_HandleTouch
@@ -259,7 +253,7 @@ int main(void)
 			for (int _j = 0; _j < 6; _j++) {
 				display_angles[_j] = RobotCtrl_GetJointAngle((uint8_t)_j);
 			}
-			RobotDisplay_UpdateJoints(display_angles);
+			TouchUI_UpdateJoints(display_angles);
 		}
 		
 		HAL_Delay(10);
