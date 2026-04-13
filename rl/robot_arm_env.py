@@ -1,8 +1,14 @@
+import os
 import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 import mujoco
 import mujoco.viewer
+
+# XML 文件和 meshes/ 都在本脚本同级目录，用绝对路径加载可避免
+# 因运行时工作目录不同而找不到 asset 的问题。
+_DIR = os.path.dirname(os.path.abspath(__file__))
+_XML_PATH = os.path.join(_DIR, "robot_arm_mujoco.xml")
 
 # Joint limits from XML (radians). Used to clip incremental position targets.
 # Joints without an XML range (J1, J4, J6) use ±π as a safe working envelope.
@@ -41,7 +47,7 @@ class RobotArmEnv(gym.Env):
     FRAME_SKIP = 50
 
     def __init__(self, render_mode=None):
-        self.model = mujoco.MjModel.from_xml_path("robot_arm_mujoco.xml")
+        self.model = mujoco.MjModel.from_xml_path(_XML_PATH)
         self.data  = mujoco.MjData(self.model)
 
         self.nu = self.model.nu   # number of actuators (6)

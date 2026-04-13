@@ -90,10 +90,20 @@ def train_robot_arm():
     """
     训练机械臂进行位置跟踪
     """
+    import torch
+    if torch.cuda.is_available():
+        print(f"使用 GPU: {torch.cuda.get_device_name(0)}")
+        print(f"显存: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
+    else:
+        print("警告: 未检测到 CUDA，将使用 CPU 训练")
+        print("请检查 PyTorch 是否安装了 CUDA 版本:")
+        print("  pip install torch --index-url https://download.pytorch.org/whl/cu121")
+
     print("创建机械臂环境...")
-    
-    # 创建环境并使用VecNormalize进行归一化
-    env = make_vec_env(lambda: RobotArmEnv(), n_envs=1)
+
+    # n_envs=4: 4个并行环境，提升 CPU 端数据采集吞吐量
+    # GPU 训练时神经网络更新速度快，多环境可以保证 replay buffer 填充速度跟得上
+    env = make_vec_env(lambda: RobotArmEnv(), n_envs=4)
     env = VecNormalize(env, norm_obs=True, norm_reward=True)
     
     # 设置动作噪声
@@ -114,35 +124,43 @@ def train_robot_arm():
         activation_fn=nn.ReLU  # 使用ReLU激活函数
     )
     
-    # 创建TD3模型
-    # buffer_size: 与原版一致，位置控制的 transition 结构基本不变。
-    # target_policy_noise: 从 0.2 调整为 0.05 rad，与新动作空间尺度匹配
-    #   (原 0.2 Nm 噪声对应扭矩空间；现在 0.05 rad ≈ 3° 对应角度增量空间)。
-    # target_noise_clip: 从 0.5 调整为 0.15 rad，同理。
+    # 创建TD3模型（GPU 优化参数）
+    #
+    # batch_size=1024: 原来 256 太小，4070 的 tensor core 在小 batch 下利用率很低。
+    #                  1024 能显著提升 GPU 计算密度，同时不超显存限制。
+    #
+    # gradient_steps=4: 每采集 1 步环境数据就做 4 次梯度更新。
+    #                   GPU 更新速度远快于 MuJoCo 仿真，增大 gradient_steps
+    #                   让 GPU 保持忙碌，提升训练样本效率。
+    #
+    # learning_starts=20000: 对应 n_envs=4 × 5000 步，保持与原来等量的预热数据。
+    #
+    # buffer_size=1000000: 4个并行环境填充 buffer 更快，适当缩小节省内存。
+    #
+    # target_policy_noise/clip: 与新动作空间（角度增量 rad）匹配。
     model = TD3(
         "MlpPolicy",
         env,
         action_noise=action_noise,
         verbose=1,
-        device="auto",
+        device="cuda",          # 强制使用 GPU，若 CUDA 不可用会直接报错（便于排查）
         learning_rate=3e-4,
-        buffer_size=3000000,
-        learning_starts=10000,
-        batch_size=256,
+        buffer_size=1000000,
+        learning_starts=20000,
+        batch_size=1024,
         tau=0.005,
         gamma=0.99,
         train_freq=1,
-        gradient_steps=1,
+        gradient_steps=4,
         policy_delay=4,
         target_policy_noise=0.05,
         target_noise_clip=0.15,
         policy_kwargs=policy_kwargs
     )
     
-    # 创建评估环境和回调函数
+    # 创建评估环境（单环境即可，评估不需要并行）
     eval_env = make_vec_env(lambda: RobotArmEnv(), n_envs=1)
     eval_env = VecNormalize(eval_env, norm_obs=True, norm_reward=False, training=False)
-    # 加载训练环境的归一化参数到评估环境中
     eval_env.obs_rms = env.obs_rms
     
     eval_callback = EvalCallback(
