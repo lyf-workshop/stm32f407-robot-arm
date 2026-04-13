@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import numpy as np; d=np.load\\('D:/Users/Administrator/Documents/GitHub/stm32f407-robot-arm/5. Deep_LR/logs/evaluations.npz'\\); print\\('timesteps:', d['timesteps'][-5:]\\); print\\('results mean:', [round\\(float\\(r.mean\\(\\)\\),1\\) for r in d['results'][-5:]]\\); print\\('ep_lengths mean:', [round\\(float\\(l.mean\\(\\)\\),1\\) for l in d['ep_lengths'][-5:]]\\); print\\('total evals:', len\\(d['timesteps']\\)\\)\")",
+      "Bash(python:*)",
+      "Bash(python3 -c \"import mujoco\")",
+      "Bash(cmd:*)",
+      "Bash(grep -n \"\\\\.\\\\./\\\\|\\\\.\\\\.\\\\\\\\\\\\\\\\<\\\\|<FilePath>\\\\|<IncludePath>\\\\|<MiscControls>\" MDK-ARM/STM32F407_CAN_CMD.uvprojx)"
+    ]
+  }
+}
